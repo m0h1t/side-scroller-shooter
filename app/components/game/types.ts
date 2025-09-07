@@ -62,5 +62,8 @@ export type Player = {
   isJumping: boolean;
   isShooting: boolean;
   isCrouching: boolean;
+  // 0..1 visual blend for crouch transition (does not affect collisions)
+  crouchAnim: number;
+  shootAnim: number;
 };
 

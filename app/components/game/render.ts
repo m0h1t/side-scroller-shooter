@@ -30,17 +30,17 @@ export type RenderDeps = {
 };
 
 export function renderGame({ ctx, game, viewport, platforms, enemies, projectiles, healthPacks, particles, splats, player }: RenderDeps) {
-  // Clear
-  ctx.fillStyle = "#1a1a2e";
+  // Clear background and draw parallax dystopia
+  ctx.fillStyle = "#0c0f1a"; // darker, bleaker
   ctx.fillRect(0, 0, viewport.width, viewport.height);
+  drawParallax(ctx, game, viewport);
 
   ctx.save();
   ctx.translate(-game.camera.x, -game.camera.y);
 
-  // Draw platforms
-  ctx.fillStyle = "#4a5568";
+  // Draw platforms as retro bricks
   for (const platform of platforms) {
-    ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+    drawBrickPlatform(ctx, platform.x, platform.y, platform.width, platform.height);
   }
 
   // Blood splats on top of platforms
@@ -95,7 +95,7 @@ export function renderGame({ ctx, game, viewport, platforms, enemies, projectile
     }
   }
 
-  // Draw player
+  // Draw player with consistent segment layout and smooth crouch blend
   const healthPct = player.hp / 100;
   const bloodiness = 1 - healthPct;
   const primaryColor = bloodiness > 0.3 ? `#ff${Math.floor(200 * healthPct).toString(16).padStart(2, '0')}${Math.floor(200 * healthPct).toString(16).padStart(2, '0')}` : "#00d4ff";
@@ -103,90 +103,101 @@ export function renderGame({ ctx, game, viewport, platforms, enemies, projectile
 
   const px = player.x + player.width / 2;
   const py = player.y;
+  const h = player.height;
   const walkBob = player.isWalking ? Math.sin(player.animTime * 8) * 1.5 : 0;
   const jumpStretch = player.isJumping ? -2 : 0;
-  const shootRecoil = player.isShooting ? player.facing * -1.5 : 0;
-  const headY = py + 2;
-  const bodyStartY = py + 18;
+  const recoilN = player.shootAnim > 0 ? Math.min(1, player.shootAnim / 0.12) : 0;
+  const shootRecoil = player.facing * (-2 - 2 * recoilN);
 
-  ctx.fillStyle = primaryColor;
-  ctx.fillRect(px - 8 + shootRecoil, headY + walkBob + jumpStretch, 16, 14);
+  // Segment sizes blend between stand and crouch
+  const headH = Math.round(14 - 4 * player.crouchAnim);
+  const bodyH = Math.round(20 - 8 * player.crouchAnim);
+  const legsH = Math.max(8, h - (headH + bodyH));
 
-  ctx.fillStyle = secondaryColor;
-  ctx.fillRect(px - 6 + shootRecoil, headY + 2 + walkBob + jumpStretch, 12, 2);
+  const headY = py + 0 + jumpStretch + walkBob * 0.66;
+  const bodyY = headY + headH;
+  const legsY = bodyY + bodyH;
 
-  ctx.fillStyle = player.isShooting ? "#ff4444" : "#44ff44";
-  ctx.fillRect(px - 5 + shootRecoil, headY + 5 + walkBob + jumpStretch, 3, 2);
-  ctx.fillRect(px + 2 + shootRecoil, headY + 5 + walkBob + jumpStretch, 3, 2);
+  // Space suit palette
+  const suit = "#b8c2d0";        // light suit
+  const suitShadow = "#8f9bb0";   // suit shading
+  const visor = "#e8b84e";        // gold visor
+  const visorGlow = "#f6d47a";
+  const trim = "#d14c4c";         // red stripes
+  const boot = "#5d6b7f";         // boots/gloves
 
-  if (bloodiness > 0.5) {
-    ctx.fillStyle = "#b11414";
-    ctx.fillRect(px - 3 + shootRecoil, headY + 3 + walkBob, 2, 2);
-    ctx.fillRect(px + 2 + shootRecoil, headY + 8 + walkBob, 3, 1);
-  }
+  // Helmet (rounded box feel)
+  ctx.fillStyle = suit;
+  ctx.fillRect(px - 9 + shootRecoil, headY, 18, headH);
+  ctx.fillStyle = suitShadow;
+  ctx.fillRect(px - 9 + shootRecoil, headY + headH - 2, 18, 2);
+  // Visor
+  const visorH = Math.max(6, headH - 6);
+  ctx.fillStyle = visor;
+  ctx.fillRect(px - 7 + shootRecoil, headY + 3, 14, Math.min(visorH, headH - 4));
+  ctx.fillStyle = visorGlow;
+  ctx.fillRect(px - 6 + shootRecoil, headY + 4, 4, 2);
 
-  if (player.isCrouching) {
-    const crouchBodyY = bodyStartY + 8;
-    const crouchBodyHeight = 12;
+  // Backpack (behind body)
+  ctx.fillStyle = suitShadow;
+  ctx.fillRect(px - 14, bodyY + 2, 6, Math.max(10, bodyH - 4));
 
-    ctx.fillStyle = primaryColor;
-    ctx.fillRect(px - 10 + shootRecoil * 0.5, crouchBodyY + walkBob, 20, crouchBodyHeight);
+  // Torso
+  ctx.fillStyle = suit;
+  ctx.fillRect(px - 10 + shootRecoil * 0.5, bodyY, 20, bodyH);
+  // Chest stripe
+  ctx.fillStyle = trim;
+  ctx.fillRect(px - 10 + shootRecoil * 0.5, bodyY + Math.max(2, Math.floor(bodyH * 0.25)), 20, 2);
 
-    ctx.fillStyle = secondaryColor;
-    ctx.fillRect(px - 8 + shootRecoil * 0.5, crouchBodyY + 2 + walkBob, 16, 2);
+  // Shoulder pads
+  ctx.fillStyle = suit;
+  ctx.fillRect(px - 16 + shootRecoil, bodyY + 6, 6, 6);
+  ctx.fillRect(px + 10 + shootRecoil, bodyY + 6, 6, 6);
 
-    ctx.fillStyle = primaryColor;
-    const armRaise = player.isShooting ? -4 : 0;
-    ctx.fillRect(px - 14 + shootRecoil, crouchBodyY + 6 + armRaise + walkBob, 6, 3);
-    ctx.fillRect(px - 16 + shootRecoil, crouchBodyY + 9 + armRaise + walkBob, 3, 8);
-    ctx.fillRect(px + 8 + shootRecoil, crouchBodyY + 6 + armRaise + walkBob, 6, 3);
-    ctx.fillRect(px + 13 + shootRecoil, crouchBodyY + 9 + armRaise + walkBob, 3, 8);
+  // Arms with gloves
+  const armSwing = player.isWalking ? Math.sin(player.animTime * 8) * (2 - player.crouchAnim) : 0;
+  const armRaise = player.isShooting ? (-6 + 2 * player.crouchAnim) : 0;
+  ctx.fillStyle = suit;
+  // Left arm
+  ctx.fillRect(px - 14 + armSwing + shootRecoil, bodyY + 10 + armRaise, 7, 4);
+  ctx.fillRect(px - 16 + armSwing + shootRecoil, bodyY + 14 + armRaise, 4, Math.max(6, bodyH - 10));
+  ctx.fillStyle = boot; // glove
+  ctx.fillRect(px - 16 + armSwing + shootRecoil, bodyY + Math.min(bodyY + bodyH, bodyY + 18 + armRaise), 4, 3);
+  // Right arm
+  ctx.fillStyle = suit;
+  ctx.fillRect(px + 7 - armSwing + shootRecoil, bodyY + 10 + armRaise, 7, 4);
+  ctx.fillRect(px + 12 - armSwing + shootRecoil, bodyY + 14 + armRaise, 4, Math.max(6, bodyH - 10));
+  ctx.fillStyle = boot;
+  ctx.fillRect(px + 12 - armSwing + shootRecoil, bodyY + Math.min(bodyY + bodyH, bodyY + 18 + armRaise), 4, 3);
 
-    if (player.isShooting) {
-      ctx.fillStyle = "#666";
-      ctx.fillRect(px + 16 + shootRecoil, crouchBodyY + 7 + armRaise + walkBob, 6, 2);
-    }
+  // Weapon block aligned to facing (kept below)
 
-    ctx.fillStyle = primaryColor;
-    ctx.fillRect(px - 8, crouchBodyY + crouchBodyHeight, 5, 8);
-    ctx.fillRect(px + 3, crouchBodyY + crouchBodyHeight, 5, 8);
-    ctx.fillRect(px - 10, crouchBodyY + crouchBodyHeight + 4, 4, 12);
-    ctx.fillRect(px + 6, crouchBodyY + crouchBodyHeight + 4, 4, 12);
-    ctx.fillRect(px - 12, crouchBodyY + crouchBodyHeight + 14, 6, 3);
-    ctx.fillRect(px + 6, crouchBodyY + crouchBodyHeight + 14, 6, 3);
-  } else {
-    const standBodyHeight = 20;
+  // Legs with boots - align to collision box bottom
+  const legSwing = player.isWalking ? Math.sin(player.animTime * 8 + Math.PI) * (3 - 1.5 * player.crouchAnim) : 0;
+  const bootHeight = 6;
+  const legLength = Math.max(4, legsH - bootHeight);
+  
+  // Calculate the actual bottom of the collision box for proper alignment
+  const feetY = py + h - bootHeight;
+  const legStartY = feetY - legLength;
+  
+  ctx.fillStyle = suit;
+  // Left leg and boot
+  ctx.fillRect(px - 7 + legSwing, legStartY, 5, legLength);
+  ctx.fillStyle = boot;
+  ctx.fillRect(px - 8 + legSwing, feetY, 7, bootHeight);
+  // Right leg and boot
+  ctx.fillStyle = suit;
+  ctx.fillRect(px + 2 - legSwing, legStartY, 5, legLength);
+  ctx.fillStyle = boot;
+  ctx.fillRect(px + 1 - legSwing, feetY, 7, bootHeight);
 
-    ctx.fillStyle = primaryColor;
-    ctx.fillRect(px - 10 + shootRecoil * 0.5, bodyStartY + walkBob, 20, standBodyHeight);
-
-    ctx.fillStyle = secondaryColor;
-    ctx.fillRect(px - 8 + shootRecoil * 0.5, bodyStartY + 3 + walkBob, 16, 3);
-
-    const armSwing = player.isWalking ? Math.sin(player.animTime * 8) * 2 : 0;
-    const armRaise = player.isShooting ? -6 : 0;
-
-    ctx.fillStyle = primaryColor;
-    ctx.fillRect(px - 16 + armSwing + shootRecoil, bodyStartY + 8 + armRaise + walkBob, 7, 4);
-    ctx.fillRect(px - 18 + armSwing + shootRecoil, bodyStartY + 12 + armRaise + walkBob, 4, 10);
-    ctx.fillRect(px + 9 - armSwing + shootRecoil, bodyStartY + 8 + armRaise + walkBob, 7, 4);
-    ctx.fillRect(px + 14 - armSwing + shootRecoil, bodyStartY + 12 + armRaise + walkBob, 4, 10);
-
-    const legSwing = player.isWalking ? Math.sin(player.animTime * 8 + Math.PI) * 3 : 0;
-    const legsY = bodyStartY + standBodyHeight;
-    const legHeight = player.height - (legsY - py);
-
-    ctx.fillStyle = primaryColor;
-    ctx.fillRect(px - 7 + legSwing, legsY + walkBob, 5, legHeight - 4);
-    ctx.fillRect(px - 8 + legSwing, py + player.height - 4, 7, 4);
-    ctx.fillRect(px + 2 - legSwing, legsY + walkBob, 5, legHeight - 4);
-    ctx.fillRect(px + 1 - legSwing, py + player.height - 4, 7, 4);
-  }
-
+  // Blood smear on torso if damaged (still visible on suit)
   if (bloodiness > 0.3) {
     ctx.fillStyle = `rgba(177, 20, 20, ${bloodiness})`;
-    ctx.fillRect(px - 4 + shootRecoil, bodyStartY + 8 + walkBob, 8, 4);
+    ctx.fillRect(px - 4 + shootRecoil, bodyY + Math.floor(bodyH / 2), 8, 4);
   }
+
 
   // Gore particles
   for (const p of particles) {
@@ -228,7 +239,7 @@ export function renderGame({ ctx, game, viewport, platforms, enemies, projectile
 
   // Post effects: scanlines + subtle vignette
   ctx.save();
-  ctx.globalAlpha = 0.12;
+  ctx.globalAlpha = 0.08;
   ctx.fillStyle = "#000";
   const spacing = 3;
   for (let y = 0; y < viewport.height; y += spacing) {
@@ -237,15 +248,10 @@ export function renderGame({ ctx, game, viewport, platforms, enemies, projectile
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // HUD
-  ctx.fillStyle = "#fff";
-  ctx.font = "16px monospace";
-  ctx.fillText(`HP: ${player.hp}`, 20, 30);
-  ctx.fillText(`Score: ${game.score}`, 20, 50);
-  ctx.fillText(`Distance: ${Math.floor(game.distance)}m`, 20, 70);
-  ctx.fillText(`Difficulty: ${game.difficulty.toFixed(1)}x`, 20, 90);
-  ctx.fillText("Move: A/D | Jump: W | Crouch: S | Shoot: Space", 20, 110);
+  // HUD panel
+  drawHUD(ctx, game, player, viewport);
 
+  // Game over overlay
   if (game.gameOver) {
     ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
     ctx.fillRect(0, 0, viewport.width, viewport.height);
@@ -257,5 +263,120 @@ export function renderGame({ ctx, game, viewport, platforms, enemies, projectile
     ctx.fillText("Press R to restart", viewport.width / 2, viewport.height / 2 + 40);
     ctx.textAlign = "left";
   }
+}
+
+function drawParallax(ctx: CanvasRenderingContext2D, game: GameState, viewport: Viewport) {
+  // Far layer: tall industrial silhouettes
+  const f1 = 0.2;
+  const base1 = Math.floor((game.camera.x * f1) / 180) * 180 - 180;
+  ctx.save();
+  ctx.fillStyle = "#0d1221";
+  for (let x = base1; x < game.camera.x * f1 + viewport.width + 180; x += 180) {
+    const sx = Math.floor(x - game.camera.x * f1);
+    const h = 120 + ((x / 180) % 4) * 30;
+    ctx.fillRect(sx + 40, viewport.height - h - 40, 28, h);
+    ctx.fillRect(sx + 80, viewport.height - h - 20, 10, h - 40);
+  }
+  ctx.restore();
+
+  // Mid layer: pipes and walkways
+  const f2 = 0.5;
+  const base2 = Math.floor((game.camera.x * f2) / 220) * 220 - 220;
+  ctx.save();
+  ctx.fillStyle = "#12182c";
+  for (let x = base2; x < game.camera.x * f2 + viewport.width + 220; x += 220) {
+    const sx = Math.floor(x - game.camera.x * f2);
+    const y = viewport.height - 110 - ((x / 220) % 3) * 12;
+    ctx.fillRect(sx, y, 140, 6);
+    // pipes
+    ctx.fillRect(sx + 30, y - 30, 6, 30);
+    ctx.fillRect(sx + 100, y - 20, 6, 20);
+    // dim warning light
+    ctx.fillStyle = Math.random() < 0.02 ? "#5c0000" : "#2a0b0b";
+    ctx.fillRect(sx + 120, y - 10, 3, 3);
+    ctx.fillStyle = "#12182c";
+  }
+  ctx.restore();
+}
+
+function drawBrickPlatform(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  // Base slab
+  ctx.fillStyle = "#4a5568"; // slate
+  ctx.fillRect(x, y, w, h);
+
+  // Horizontal mortar lines
+  ctx.fillStyle = "#3b4455";
+  const rowH = 6;
+  for (let yy = y; yy < y + h; yy += rowH) {
+    ctx.fillRect(x, yy, w, 1);
+  }
+
+  // Vertical mortar lines (offset every row for brick pattern)
+  ctx.fillStyle = "#394151";
+  const brickW = 20;
+  for (let row = 0, yy = y; yy < y + h; yy += rowH, row++) {
+    const offset = (row % 2) * (brickW / 2);
+    for (let xx = x + offset; xx < x + w; xx += brickW) {
+      ctx.fillRect(Math.floor(xx), yy, 1, Math.min(rowH, y + h - yy));
+    }
+  }
+
+  // Subtle top highlight and bottom shadow for depth
+  ctx.fillStyle = "rgba(255,255,255,0.06)";
+  ctx.fillRect(x, y, w, 1);
+  ctx.fillStyle = "rgba(0,0,0,0.1)";
+  ctx.fillRect(x, y + h - 1, w, 1);
+}
+
+function drawHUD(ctx: CanvasRenderingContext2D, game: GameState, player: Player, viewport: Viewport) {
+  const panelX = 16;
+  const panelY = 16;
+  const panelW = 420;
+  const panelH = 110; // Increased height to prevent text bleeding
+
+  // Panel background
+  ctx.save();
+  ctx.fillStyle = "rgba(8,10,18,0.8)"; // More opaque for better readability
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeStyle = "#222638";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(panelX + 0.5, panelY + 0.5, panelW - 1, panelH - 1);
+
+  // Text baseline so labels stay inside the panel
+  ctx.textBaseline = "top";
+
+  // Label and bar with more padding from top
+  const barX = panelX + 16;
+  const labelY = panelY + 18; // More space from top edge
+  ctx.fillStyle = "#cfd3e5";
+  ctx.font = "bold 16px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, sans-serif"; // Smaller font to fit better
+  ctx.fillText("HP", barX, labelY);
+
+  const barY = labelY + 22; // Tighter spacing
+  const barW = panelW - 32;
+  const barH = 12; // Slightly smaller bar
+  const pct = Math.max(0, Math.min(1, player.hp / 100));
+  ctx.fillStyle = "#1c2438";
+  ctx.fillRect(barX, barY, barW, barH);
+  ctx.fillStyle = pct > 0.3 ? "#cf2e2e" : "#a51818";
+  ctx.fillRect(barX, barY, Math.floor(barW * pct), barH);
+  // Bar border
+  ctx.strokeStyle = "#394055";
+  ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1);
+
+  // Row 2 stats with better spacing
+  ctx.fillStyle = "#cfd3e5";
+  ctx.font = "bold 14px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, sans-serif"; // Consistent smaller font
+  const row2Y = barY + 24; // Better spacing after the bar
+  ctx.fillText(`Score: ${game.score}`, barX, row2Y);
+  ctx.fillText(`Distance: ${Math.floor(game.distance)}m`, barX + 140, row2Y); // Adjusted spacing
+  ctx.fillText(`Difficulty: ${game.difficulty.toFixed(1)}x`, barX + 280, row2Y); // Adjusted spacing
+
+  // Controls hint with more space
+  ctx.fillStyle = "#aab0c7";
+  ctx.font = "11px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, sans-serif"; // Smaller font for controls
+  ctx.fillText("Move: A/D | Jump: W | Crouch: S | Shoot: Space", barX, row2Y + 26); // More space between rows
+
+  ctx.restore();
 }
 

@@ -1,5 +1,6 @@
 import { Enemy, HealthPack, Particle, Platform, Projectile, Splat, HealthPack as HP } from "./types";
 import type { Player } from "./types";
+import { spawnGore } from "./effects";
 
 export type Viewport = { width: number; height: number };
 export type GameState = {
@@ -150,6 +151,12 @@ export function updateGame(dt: number, deps: UpdateDeps) {
   // Gravity (stronger when jump not held for variable jump height)
   player.vy += GRAVITY * dt * (controls.jumpHeld && player.vy < 0 ? 0.7 : 1);
 
+  // Smooth crouch animation blend (visual-only)
+  const crouchTarget = player.isCrouching ? 1 : 0;
+  const blendSpeed = 10; // higher is snappier
+  player.crouchAnim += (crouchTarget - player.crouchAnim) * Math.min(1, dt * blendSpeed);
+  if (player.crouchAnim < 0) player.crouchAnim = 0; else if (player.crouchAnim > 1) player.crouchAnim = 1;
+
   // Integrate with axis-separated collision
   // Move X
   player.x += player.vx * dt;
@@ -205,10 +212,14 @@ export function updateGame(dt: number, deps: UpdateDeps) {
     });
     player.shootCooldown = player.shootInterval;
     player.isShooting = true;
+    player.shootAnim = 0.12;
     setTimeout(() => {
       player.isShooting = false;
     }, 100);
   }
+
+  // Shooting anim decay
+  if (player.shootAnim > 0) player.shootAnim = Math.max(0, player.shootAnim - dt);
 
   // Update enemies
   for (const enemy of enemies) {
@@ -321,6 +332,18 @@ export function updateGame(dt: number, deps: UpdateDeps) {
           if (enemy.hp <= 0) {
             const points = enemy.type === 'heavy' ? 200 : enemy.type === 'sniper' ? 150 : enemy.type === 'fast' ? 75 : 100;
             game.score += points;
+            spawnGore(particles, splats, addShake, enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 16);
+            // 40% chance to drop a health pack on kill
+            if (Math.random() < 0.4) {
+              healthPacks.push({
+                x: enemy.x + enemy.width / 2 - 10,
+                y: enemy.y + enemy.height / 2 - 10,
+                width: 20,
+                height: 20,
+                animTime: 0,
+                collected: false,
+              });
+            }
           }
           break;
         }
@@ -334,6 +357,7 @@ export function updateGame(dt: number, deps: UpdateDeps) {
       ) {
         player.hp -= 10;
         projectiles.splice(i, 1);
+        spawnGore(particles, splats, addShake, player.x + player.width / 2, player.y + player.height / 2, 10);
         addShake(4, 0.12);
         if (player.hp <= 0) game.gameOver = true;
       }
