@@ -4,7 +4,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## Project Overview
 
-This is a **Next.js 15.5.2** side-scroller shooter game built with React 19, TypeScript, and Tailwind CSS v4. The game is rendered using HTML5 Canvas with two implementation variants (`SideScrollerGame.tsx` and `GameCanvas.tsx`) in the `app/components/` directory.
+This is a **Next.js 15.5.2** side-scroller shooter game built with React 19, TypeScript, and Tailwind CSS v4. The game is rendered using HTML5 Canvas with two implementation variants in the `app/components/` directory.
 
 ## Development Commands
 
@@ -38,42 +38,55 @@ npm run dev -- --port 3001
 npm run build && npm start
 ```
 
-Note: No test runner is configured in package.json. Running a single test is not applicable until a test framework is added.
+Note: No test runner is configured. To add tests, install a framework like Jest or Vitest.
 
 ## Architecture & Code Structure
 
-- App entry mounts the main game: `app/page.tsx` imports and renders `app/components/SideScrollerGame.tsx`.
+### Entry Points
+- `app/page.tsx` - Main page that mounts the game
+- `app/layout.tsx` - Root layout with Geist font and global styles
 
-### Game Components
-The game has two Canvas-based implementations:
+### Game Implementations
 
-1. **`app/components/SideScrollerGame.tsx`** — Main implementation used by the app
-   - Self-contained game loop with logic in one component (update + render)
-   - Uses `requestAnimationFrame` and delta time
-   - Implements player, enemies, projectiles, collisions, endless chunk generation
-   - Controls: A/D (move), W (jump), S (crouch), Space (shoot), R (restart)
+1. **`app/components/SideScrollerGame.tsx`** (Primary - Currently Active)
+   - Main game component with modular architecture
+   - Game logic split into modules in `app/components/game/`:
+     - `types.ts` - TypeScript interfaces for all game entities
+     - `update.ts` - Main game update logic
+     - `render.ts` - Canvas rendering logic
+     - `platforms.ts` - Platform generation and chunking
+     - `spawn.ts` - Enemy spawning logic
+     - `effects.ts` - Visual effects (particles, gore, blood splats)
+     - `math.ts` - Utility functions (clamp, rand, etc.)
+   - Uses `requestAnimationFrame` with delta time
+   - High-DPI canvas rendering with devicePixelRatio scaling
 
-2. **`app/components/GameCanvas.tsx`** — Alternative implementation (currently unused)
-   - More modular helpers (collision resolution, entities)
-   - Similar gameplay with different physics constants
+2. **`app/components/GameCanvas.tsx`** (Alternative - Currently Unused)
+   - More compact, inline implementation
+   - Different physics constants and simpler enemy patterns
+   - Could be used as a simpler example or fallback
 
 ### Key Game Systems
 
 **Player System:**
-- Position, velocity, HP, facing
-- Acceleration/friction movement, variable jump (coyote time + jump buffering)
-- Crouch alters hitbox and movement speed
-- Shooting with cooldown timer
+- Smooth acceleration-based movement (2200 px/s² accel, 2400 px/s² friction)
+- Variable jump with coyote time (0.08s) and jump buffering (0.12s)
+- Crouch mechanics (height: 72px → 45px)
+- Shooting with 0.18s cooldown
+- 100 HP with health pack pickups
 
-**Enemy System:**
-- Patrol movement with boundary checks
-- Progressive activation and variable types (grunt, fast, heavy, sniper)
-- AI shooting when player within range; some types have spread fire
+**Enemy Types:**
+- Grunt: Basic enemy, 3 HP
+- Fast: Quick movement, 2 HP
+- Heavy: High HP (5), slower movement
+- Sniper: Long-range, precise shooting
 
-**Physics & Collision:**
-- Axis-separated collision with platforms for ground detection
-- Projectile collision with platforms, enemies, and player
-- Camera follows player with screen shake and endless platform generation
+**Physics:**
+- Gravity: 2600 px/s²
+- Player max speed: 380 px/s
+- Jump velocity: 950 px/s
+- Frame-independent physics with delta time
+- Axis-aligned bounding box collision detection
 
 ### Path Aliases
 The project uses TypeScript path mapping:
@@ -87,11 +100,11 @@ The project uses TypeScript path mapping:
 ## Common Development Tasks
 
 ### Adding New Game Features (SideScrollerGame.tsx)
-- Game state object (around line ~73): camera, world, score, endless generation, difficulty
-- Player object (around line ~93): movement, jump helpers, crouch, shooting, animation flags
-- Main game loop (around line ~303+): `update(dt)` and `render()`
-- Enemy spawning (around line ~182+): type selection, spawn conditions
-- Platform generation (around line ~132+): initial and chunk generation
+- Game state object (around line ~41): camera, world, score, endless generation, difficulty
+- Player object (around line ~61): movement, jump helpers, crouch, shooting, animation flags
+- Main game loop (around line ~146): update and render called via `requestAnimationFrame`
+- Enemy spawning: Handled in `game/spawn.ts` module
+- Platform generation: Handled in `game/platforms.ts` module
 
 ### Development Workflow
 - All entities use typed interfaces (Player, Enemy, Projectile, HealthPack)

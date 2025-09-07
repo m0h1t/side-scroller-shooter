@@ -6,7 +6,7 @@ import { rand, generateInitialPlatforms, addPlatformChunk } from "./game/platfor
 import { spawnEnemy } from "./game/spawn";
 import { spawnGore as spawnGoreFx } from "./game/effects";
 import { updateGame } from "./game/update";
-import { renderGame } from "./game/render";
+import { renderGame } from "./game/render-doom";
 
 export default function SideScrollerGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
