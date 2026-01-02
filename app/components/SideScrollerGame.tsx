@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { Platform, Enemy, Projectile, HealthPack, Particle, Splat } from "./game/types";
 import { rand, generateInitialPlatforms, addPlatformChunk } from "./game/platforms";
 import { spawnEnemy } from "./game/spawn";
-import { spawnGore as spawnGoreFx } from "./game/effects";
 import { updateGame } from "./game/update";
 import { renderGame, resetGameOverState } from "./game/render-ultimate";
 import { audioManager } from "./game/audio";
@@ -91,9 +90,6 @@ export default function SideScrollerGame() {
     const GRAVITY = 2600; // px/s^2
     const COYOTE_TIME = 0.08; // seconds grace after leaving ground
     const JUMP_BUFFER = 0.12; // seconds grace before landing
-    let coyoteTimer = 0;
-    let jumpBufferTimer = 0;
-    let jumpHeld = false;
 
     // Endless platform generation
 
@@ -108,7 +104,7 @@ export default function SideScrollerGame() {
     }
 
 
-    let enemies: Enemy[] = [];
+    const enemies: Enemy[] = [];
     const projectiles: Projectile[] = [];
     const healthPacks: HealthPack[] = [];
 

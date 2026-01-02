@@ -24,8 +24,13 @@ class AudioManager {
   
   private initAudioContext() {
     try {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    } catch (e) {
+      const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) {
+        console.warn('Web Audio API not supported');
+        return;
+      }
+      this.audioContext = new AudioContextClass();
+    } catch {
       console.warn('Web Audio API not supported');
     }
   }
@@ -301,7 +306,7 @@ class AudioManager {
     Object.keys(this.ambientNodes).forEach(key => {
       try {
         this.ambientNodes[key].stop();
-      } catch (e) {
+      } catch {
         // Node might already be stopped
       }
     });
