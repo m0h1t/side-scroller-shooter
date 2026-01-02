@@ -66,8 +66,10 @@ let flickerTimer = 0;
 let glitchTimer = 0;
 
 // Environmental effects arrays
+// eslint-disable-next-line prefer-const
 let fogParticles: {x: number, y: number, size: number, opacity: number, speed: number}[] = [];
 let sparks: {x: number, y: number, vx: number, vy: number, life: number}[] = [];
+// eslint-disable-next-line prefer-const
 let dust: {x: number, y: number, vx: number, vy: number, size: number, opacity: number}[] = [];
 
 // Initialize environmental effects
@@ -156,7 +158,9 @@ export function renderGame({ ctx, game, viewport, platforms, enemies, projectile
     try {
       audioManager.resume();
       audioManager.startAmbientSounds();
-    } catch (e) {}
+    } catch {
+      // Audio may not be available
+    }
   }
   
   // Clear with deep black
@@ -265,7 +269,7 @@ export function renderGame({ ctx, game, viewport, platforms, enemies, projectile
   drawForegroundDebris(ctx, game, viewport);
   
   // Post-processing effects
-  drawEnhancedPostEffects(ctx, viewport, game);
+  drawEnhancedPostEffects(ctx, viewport);
   
   // Draw ultimate HUD
   drawUltimateHUD(ctx, game, player, viewport);
@@ -469,7 +473,6 @@ function drawEnemyWithShadow(ctx: CanvasRenderingContext2D, enemy: Enemy) {
   
   const healthPct = enemy.hp / enemy.maxHp;
   const bob = Math.sin(enemy.animTime * 4) * 3;
-  const pulse = 1 + Math.sin(enemy.animTime * 8) * 0.1;
   
   ctx.save();
   
@@ -814,8 +817,8 @@ function drawEnhancedProjectile(ctx: CanvasRenderingContext2D, proj: Projectile)
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(proj.x, proj.y, proj.width, proj.height);
   } else {
-    // Enemy projectile
-    const enemyProjColor = proj.type === 'sniper' ? COLORS.NEON_GREEN : COLORS.UI_ORANGE;
+    // Enemy projectile (single style for all enemy shots)
+    const enemyProjColor = COLORS.UI_ORANGE;
     ctx.shadowColor = enemyProjColor;
     ctx.shadowBlur = 15;
     
@@ -854,7 +857,7 @@ function drawForegroundDebris(ctx: CanvasRenderingContext2D, game: GameState, vi
   ctx.restore();
 }
 
-function drawEnhancedPostEffects(ctx: CanvasRenderingContext2D, viewport: Viewport, game: GameState) {
+function drawEnhancedPostEffects(ctx: CanvasRenderingContext2D, viewport: Viewport) {
   // Film grain effect
   ctx.save();
   ctx.globalAlpha = 0.05;
@@ -1026,7 +1029,9 @@ function drawUltimateHUD(ctx: CanvasRenderingContext2D, game: GameState, player:
     if (Math.random() < 0.5) {
       try {
         audioManager.playPowerBeep();
-      } catch (e) {}
+      } catch {
+        // Audio may not be available
+      }
     }
   } else if (powerStatus) {
     // Normal state
@@ -1117,7 +1122,9 @@ function drawDeathTransition(ctx: CanvasRenderingContext2D, viewport: Viewport):
     deathTransitionTime = 0;
     try {
       audioManager.playDeathTransition();
-    } catch (e) {}
+    } catch {
+      // Audio may not be available
+    }
   }
   
   deathTransitionTime += 0.016;
@@ -1178,7 +1185,7 @@ function drawIntenseGameOver(ctx: CanvasRenderingContext2D, viewport: Viewport) 
       audioManager.resume();
       audioManager.playSystemFailure();
       setTimeout(() => audioManager.playRoboticVoice(), 200);
-    } catch (e) {
+    } catch {
       // Audio might not be available
     }
   }
@@ -1244,7 +1251,7 @@ function drawIntenseGameOver(ctx: CanvasRenderingContext2D, viewport: Viewport) 
       if (Math.random() < 0.3) {
         try {
           audioManager.playGlitch();
-        } catch (e) {
+        } catch {
           // Audio might not be available
         }
       }
@@ -1412,5 +1419,7 @@ export function resetGameOverState() {
   // Stop ambient sounds when game over
   try {
     audioManager.stopAmbientSounds();
-  } catch (e) {}
+  } catch {
+    // Audio may not be available
+  }
 }

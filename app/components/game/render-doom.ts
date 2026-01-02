@@ -705,28 +705,29 @@ function drawProjectile(ctx: CanvasRenderingContext2D, proj: Projectile) {
   } else {
     // Enemy projectile (plasma/fireball)
     const pulse = Math.sin(Date.now() * 0.01) * 0.3 + 0.7;
-    
-    ctx.shadowColor = proj.type === 'sniper' ? '#00ff00' : '#ff4400';
+
+    // Single plasma style for all enemy projectiles (no proj.type field)
+    ctx.shadowColor = '#ff4400';
     ctx.shadowBlur = 10;
-    
+
     // Plasma ball
     const gradient = ctx.createRadialGradient(
-      proj.x + proj.width/2, proj.y + proj.height/2, 0,
-      proj.x + proj.width/2, proj.y + proj.height/2, proj.width
+      proj.x + proj.width / 2,
+      proj.y + proj.height / 2,
+      0,
+      proj.x + proj.width / 2,
+      proj.y + proj.height / 2,
+      proj.width
     );
-    
-    if (proj.type === 'sniper') {
-      gradient.addColorStop(0, '#00ff00');
-      gradient.addColorStop(0.5, '#00aa00');
-      gradient.addColorStop(1, 'transparent');
-    } else {
-      gradient.addColorStop(0, '#ffaa00');
-      gradient.addColorStop(0.5, '#ff4400');
-      gradient.addColorStop(1, 'transparent');
-    }
-    
+
+    gradient.addColorStop(0, '#ffaa00');
+    gradient.addColorStop(0.5, '#ff4400');
+    gradient.addColorStop(1, 'transparent');
+
+    ctx.globalAlpha = pulse;
     ctx.fillStyle = gradient;
     ctx.fillRect(proj.x - 2, proj.y - 2, proj.width + 4, proj.height + 4);
+    ctx.globalAlpha = 1;
   }
   
   ctx.restore();
