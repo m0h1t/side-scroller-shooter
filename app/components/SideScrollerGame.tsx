@@ -6,7 +6,8 @@ import { rand, generateInitialPlatforms, addPlatformChunk } from "./game/platfor
 import { spawnEnemy } from "./game/spawn";
 import { spawnGore as spawnGoreFx } from "./game/effects";
 import { updateGame } from "./game/update";
-import { renderGame } from "./game/render-doom";
+import { renderGame, resetGameOverState } from "./game/render-ultimate";
+import { audioManager } from "./game/audio";
 
 export default function SideScrollerGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -126,6 +127,10 @@ export default function SideScrollerGame() {
         controls.jumpBufferTimer = JUMP_BUFFER;
         controls.jumpHeld = true;
       }
+      // Toggle mute with M key
+      if (k === "m") {
+        audioManager.toggleMute();
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -188,6 +193,9 @@ export default function SideScrollerGame() {
     // Restart handler (regenerate level/enemies)
     const handleRestart = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === "r" && game.gameOver) {
+        // Reset game over state
+        resetGameOverState();
+        
         // Reset everything for new endless run
         game.score = 0;
         game.distance = 0;

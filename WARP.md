@@ -52,11 +52,13 @@ Note: No test runner is configured. To add tests, install a framework like Jest 
    - Main game component with modular architecture
    - Game logic split into modules in `app/components/game/`:
      - `types.ts` - TypeScript interfaces for all game entities
-     - `update.ts` - Main game update logic
-     - `render.ts` - Canvas rendering logic
-     - `platforms.ts` - Platform generation and chunking
-     - `spawn.ts` - Enemy spawning logic
-     - `effects.ts` - Visual effects (particles, gore, blood splats)
+     - `update.ts` - Main game update logic and enemy/platform/health-pack updates
+     - `render-ultimate.ts` - Primary renderer with advanced visuals, HUD, post-processing, and game-over sequences
+     - `render.ts` - Simpler legacy renderer (not currently wired into `SideScrollerGame`)
+     - `platforms.ts` - Platform generation and chunking for endless scrolling
+     - `spawn.ts` - Enemy spawning logic based on difficulty and platform layout
+     - `effects.ts` - Visual effects (particles, gore, explosions, muzzle flashes)
+     - `audio.ts` - Web Audio API–based audio manager used by `render-ultimate.ts` (ambient hum, drips, glitches, death/system-failure SFX)
      - `math.ts` - Utility functions (clamp, rand, etc.)
    - Uses `requestAnimationFrame` with delta time
    - High-DPI canvas rendering with devicePixelRatio scaling
@@ -64,7 +66,14 @@ Note: No test runner is configured. To add tests, install a framework like Jest 
 2. **`app/components/GameCanvas.tsx`** (Alternative - Currently Unused)
    - More compact, inline implementation
    - Different physics constants and simpler enemy patterns
+   - Self-contained game loop and rendering (does not use the modular `game/` subsystem)
    - Could be used as a simpler example or fallback
+
+### Game Loop & State Flow
+- `app/page.tsx` wraps `SideScrollerGame` in a full-screen frame.
+- `SideScrollerGame` owns the canvas, input handling, and main `requestAnimationFrame` loop.
+- Each frame it calls `updateGame` (physics, AI, score, spawning) and then `renderGame` from `render-ultimate.ts` (parallax background, platforms, player/enemies, HUD, post effects, and audio integration).
+- Endless platforms come from `platforms.ts`, enemies from `spawn.ts`, and particles/splats from `effects.ts`; all share typed entities from `types.ts`.
 
 ### Key Game Systems
 
@@ -87,6 +96,11 @@ Note: No test runner is configured. To add tests, install a framework like Jest 
 - Jump velocity: 950 px/s
 - Frame-independent physics with delta time
 - Axis-aligned bounding box collision detection
+
+**Audio & HUD System:**
+- `audio.ts` creates a singleton `audioManager` using the Web Audio API (ambient hum, static, drips, power beeps, glitches, system-failure and death-transition sounds).
+- `render-ultimate.ts` drives ambient audio startup/shutdown and uses `audioManager` for HUD power beeps, death transitions, and game-over/system-failure sequences.
+- HUD shows segmented health, difficulty, distance/score, ammo-style readout, and a mute indicator; low HP and power states intentionally flicker/glitch.
 
 ### Path Aliases
 The project uses TypeScript path mapping:
@@ -132,6 +146,7 @@ The project uses TypeScript path mapping:
 - S: Crouch (reduced hitbox/speed)
 - Space: Shoot
 - R: Restart after game over
+- M: Toggle mute/unmute for all game audio (state persisted in `localStorage`)
 
 ### Canvas Development
 - Inspect canvas performance in DevTools; devicePixelRatio scaling is enabled
