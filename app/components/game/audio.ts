@@ -299,6 +299,148 @@ class AudioManager {
     osc.stop(now + 0.05);
   }
   
+  // 8-bit pew
+  playShoot() {
+    if (!this.audioContext || this.isMuted) return;
+    const now = this.audioContext.currentTime;
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 0.08);
+    gain.gain.setValueAtTime(this.masterVolume * 0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+    osc.start(now);
+    osc.stop(now + 0.1);
+  }
+
+  // Crunch/thud on enemy hit
+  playEnemyHit() {
+    if (!this.audioContext || this.isMuted) return;
+    const now = this.audioContext.currentTime;
+    this.playNoiseBurst(now, 0.04);
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 120;
+    gain.gain.setValueAtTime(this.masterVolume * 0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+    osc.start(now);
+    osc.stop(now + 0.06);
+  }
+
+  // Descending arpeggio on enemy death
+  playEnemyDeath() {
+    if (!this.audioContext || this.isMuted) return;
+    const now = this.audioContext.currentTime;
+    const freqs = [440, 330, 220];
+    freqs.forEach((freq, i) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+      const t = now + i * 0.07;
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(this.masterVolume * 0.3, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+      osc.connect(gain);
+      gain.connect(this.audioContext!.destination);
+      osc.start(t);
+      osc.stop(t + 0.08);
+    });
+    this.playNoiseBurst(now + 0.21, 0.03);
+  }
+
+  // Harsh buzzer when player is hit
+  playPlayerHit() {
+    if (!this.audioContext || this.isMuted) return;
+    const now = this.audioContext.currentTime;
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+    const shaper = this.audioContext.createWaveShaper();
+    const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) curve[i] = Math.tanh((i / 128 - 1) * 5);
+    shaper.curve = curve;
+    osc.type = 'sawtooth';
+    osc.frequency.value = 80;
+    gain.gain.setValueAtTime(this.masterVolume * 0.4, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    osc.connect(shaper);
+    shaper.connect(gain);
+    gain.connect(this.audioContext.destination);
+    osc.start(now);
+    osc.stop(now + 0.2);
+  }
+
+  // Platformer spring chirp on jump
+  playJump() {
+    if (!this.audioContext || this.isMuted) return;
+    const now = this.audioContext.currentTime;
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(200, now);
+    osc.frequency.exponentialRampToValueAtTime(600, now + 0.12);
+    gain.gain.setValueAtTime(this.masterVolume * 0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+    osc.start(now);
+    osc.stop(now + 0.18);
+  }
+
+  // Ascending chime on health pickup
+  playHealthPickup() {
+    if (!this.audioContext || this.isMuted) return;
+    const now = this.audioContext.currentTime;
+    [523, 659, 784].forEach((freq, i) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+      const t = now + i * 0.06;
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(this.masterVolume * 0.2, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.connect(gain);
+      gain.connect(this.audioContext!.destination);
+      osc.start(t);
+      osc.stop(t + 0.15);
+    });
+  }
+
+  // Noise burst + low rumble for explosion
+  playExplosion() {
+    if (!this.audioContext || this.isMuted) return;
+    const now = this.audioContext.currentTime;
+    // Loud noise burst
+    const bufferSize = Math.floor(this.audioContext.sampleRate * 0.12);
+    const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const source = this.audioContext.createBufferSource();
+    const noiseGain = this.audioContext.createGain();
+    source.buffer = buffer;
+    noiseGain.gain.value = this.masterVolume * 0.5;
+    source.connect(noiseGain);
+    noiseGain.connect(this.audioContext.destination);
+    source.start(now);
+    // Low rumble
+    const rumble = this.audioContext.createOscillator();
+    const rumbleGain = this.audioContext.createGain();
+    rumble.type = 'sawtooth';
+    rumble.frequency.value = 40;
+    rumbleGain.gain.setValueAtTime(this.masterVolume * 0.3, now);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    rumble.connect(rumbleGain);
+    rumbleGain.connect(this.audioContext.destination);
+    rumble.start(now);
+    rumble.stop(now + 0.5);
+  }
+
   // Stop ambient sounds
   stopAmbientSounds() {
     this.isAmbientPlaying = false;

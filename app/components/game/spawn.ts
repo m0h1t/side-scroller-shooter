@@ -64,6 +64,9 @@ export function spawnEnemy(x: number, platforms: Platform[], game: { difficulty:
     shootInterval: Math.max(0.6, shootInterval),
     type,
     animTime: 0,
+    dying: false,
+    dyingTime: 0,
+    flashTimer: 0,
   };
 }
 

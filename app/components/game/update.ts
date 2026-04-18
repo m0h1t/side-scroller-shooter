@@ -1,10 +1,15 @@
-import { Enemy, HealthPack, Particle, Platform, Projectile, Splat, HealthPack as HP } from "./types";
+import { Enemy, HealthPack, Particle, Platform, Projectile, Splat, ScreenSplat } from "./types";
 import type { Player } from "./types";
-import { spawnGore } from "./effects";
+import { spawnGore, spawnWallHitDebris, spawnScreenSplat } from "./effects";
+import { lerp, smoothNoise1D } from "./math";
+import { audioManager } from "./audio";
 
 export type Viewport = { width: number; height: number };
 export type GameState = {
   camera: { x: number; y: number };
+  cameraSmoothX: number;
+  cameraSmoothY: number;
+  gameTime: number;
   world: { height: number };
   score: number;
   distance: number;
@@ -29,6 +34,7 @@ export type UpdateDeps = {
   healthPacks: HealthPack[];
   particles: Particle[];
   splats: Splat[];
+  screenSplats: ScreenSplat[];
   keys: Record<string, boolean>;
   addShake: (mag: number, time: number) => void;
   constants: { GRAVITY: number; COYOTE_TIME: number };
@@ -49,6 +55,7 @@ export function updateGame(dt: number, deps: UpdateDeps) {
     healthPacks,
     particles,
     splats,
+    screenSplats,
     keys,
     addShake,
     constants: { GRAVITY, COYOTE_TIME },
@@ -57,6 +64,8 @@ export function updateGame(dt: number, deps: UpdateDeps) {
     addPlatformChunk,
     spawnEnemy,
   } = deps;
+
+  game.gameTime += dt;
 
   const prevDist = Math.floor(game.distance / 500);
 
@@ -93,7 +102,35 @@ export function updateGame(dt: number, deps: UpdateDeps) {
   }
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
-    if (!(e.x + e.width > cleanupX && e.hp > 0)) enemies.splice(i, 1);
+    if (!(e.x + e.width > cleanupX && (e.hp > 0 || e.dying))) enemies.splice(i, 1);
+  }
+
+  // Process dying enemies (flash then gore burst)
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const enemy = enemies[i];
+    if (!enemy.dying) continue;
+    enemy.dyingTime += dt;
+    enemy.flashTimer -= dt;
+    if (enemy.dyingTime >= 0.4) {
+      const points = enemy.type === 'heavy' ? 200 : enemy.type === 'sniper' ? 150 : enemy.type === 'fast' ? 75 : 100;
+      game.score += points;
+      spawnGore(particles, splats, addShake, enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 32);
+      spawnScreenSplat(screenSplats, viewport.width, viewport.height, 4);
+      audioManager.playExplosion();
+      if (Math.random() < 0.4) {
+        const spawnY = enemy.y + enemy.height / 2 - 10;
+        healthPacks.push({
+          x: enemy.x + enemy.width / 2 - 10,
+          y: spawnY,
+          width: 20,
+          height: 20,
+          animTime: 0,
+          collected: false,
+          baseY: spawnY,
+        });
+      }
+      enemies.splice(i, 1);
+    }
   }
 
   // Update screen shake timer
@@ -167,6 +204,8 @@ export function updateGame(dt: number, deps: UpdateDeps) {
       player.y < p.y + p.height &&
       player.y + player.height > p.y
     ) {
+      const overlapY = Math.min(player.y + player.height, p.y + p.height) - Math.max(player.y, p.y);
+      if (overlapY <= 6) continue;
       if (player.vx > 0) player.x = p.x - player.width;
       else if (player.vx < 0) player.x = p.x + p.width;
       player.vx = 0;
@@ -183,6 +222,8 @@ export function updateGame(dt: number, deps: UpdateDeps) {
       player.y < p.y + p.height &&
       player.y + player.height > p.y
     ) {
+      const overlapX = Math.min(player.x + player.width, p.x + p.width) - Math.max(player.x, p.x);
+      if (overlapX <= 6) continue;
       if (player.vy > 0) {
         player.y = p.y - player.height;
         player.onGround = true;
@@ -209,10 +250,12 @@ export function updateGame(dt: number, deps: UpdateDeps) {
       width: 8,
       height: 4,
       fromPlayer: true,
+      hasDrag: true,
     });
     player.shootCooldown = player.shootInterval;
     player.isShooting = true;
     player.shootAnim = 0.12;
+    audioManager.playShoot();
     setTimeout(() => {
       player.isShooting = false;
     }, 100);
@@ -223,7 +266,7 @@ export function updateGame(dt: number, deps: UpdateDeps) {
 
   // Update enemies
   for (const enemy of enemies) {
-    if (!enemy.active || enemy.hp <= 0) continue;
+    if (!enemy.active || enemy.hp <= 0 || enemy.dying) continue;
 
     enemy.animTime += dt;
 
@@ -291,6 +334,10 @@ export function updateGame(dt: number, deps: UpdateDeps) {
   // Update projectiles
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const proj = projectiles[i];
+    if (proj.fromPlayer && proj.hasDrag) {
+      proj.vx *= Math.exp(-1.5 * dt);
+      proj.vy += GRAVITY * 0.15 * dt;
+    }
     proj.x += proj.vx * dt;
     proj.y += proj.vy * dt;
 
@@ -305,6 +352,7 @@ export function updateGame(dt: number, deps: UpdateDeps) {
     }
 
     // Collision with platforms
+    let hitPlatform = false;
     for (const platform of platforms) {
       if (
         proj.x < platform.x + platform.width &&
@@ -312,10 +360,13 @@ export function updateGame(dt: number, deps: UpdateDeps) {
         proj.y < platform.y + platform.height &&
         proj.y + proj.height > platform.y
       ) {
+        spawnWallHitDebris(particles, proj.x, proj.y, Math.sign(proj.vx) as 1 | -1);
         projectiles.splice(i, 1);
+        hitPlatform = true;
         break;
       }
     }
+    if (hitPlatform) continue;
 
     // Collision with enemies/player
     if (proj.fromPlayer) {
@@ -330,20 +381,12 @@ export function updateGame(dt: number, deps: UpdateDeps) {
           enemy.hp--;
           projectiles.splice(i, 1);
           if (enemy.hp <= 0) {
-            const points = enemy.type === 'heavy' ? 200 : enemy.type === 'sniper' ? 150 : enemy.type === 'fast' ? 75 : 100;
-            game.score += points;
-            spawnGore(particles, splats, addShake, enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 16);
-            // 40% chance to drop a health pack on kill
-            if (Math.random() < 0.4) {
-              healthPacks.push({
-                x: enemy.x + enemy.width / 2 - 10,
-                y: enemy.y + enemy.height / 2 - 10,
-                width: 20,
-                height: 20,
-                animTime: 0,
-                collected: false,
-              });
-            }
+            enemy.dying = true;
+            enemy.dyingTime = 0;
+            enemy.flashTimer = 0.4;
+            audioManager.playEnemyDeath();
+          } else {
+            audioManager.playEnemyHit();
           }
           break;
         }
@@ -358,7 +401,9 @@ export function updateGame(dt: number, deps: UpdateDeps) {
         player.hp -= 10;
         projectiles.splice(i, 1);
         spawnGore(particles, splats, addShake, player.x + player.width / 2, player.y + player.height / 2, 10);
+        spawnScreenSplat(screenSplats, viewport.width, viewport.height, 2);
         addShake(4, 0.12);
+        audioManager.playPlayerHit();
         if (player.hp <= 0) game.gameOver = true;
       }
     }
@@ -374,11 +419,19 @@ export function updateGame(dt: number, deps: UpdateDeps) {
     if (p.life <= 0) particles.splice(i, 1);
   }
 
+  // Fade screen splats
+  for (let i = screenSplats.length - 1; i >= 0; i--) {
+    const s = screenSplats[i];
+    s.age += dt;
+    s.alpha = Math.max(0, s.alpha - dt * 0.3);
+    if (s.alpha <= 0) screenSplats.splice(i, 1);
+  }
+
   // Update health packs
   for (let i = healthPacks.length - 1; i >= 0; i--) {
     const hp = healthPacks[i];
     hp.animTime += dt;
-    hp.y += Math.sin(hp.animTime * 3) * 0.5;
+    hp.y = hp.baseY + Math.sin(hp.animTime * 3) * 6;
 
     if (
       !hp.collected &&
@@ -391,6 +444,7 @@ export function updateGame(dt: number, deps: UpdateDeps) {
       game.score += 50;
       hp.collected = true;
       addShake(2, 0.1);
+      audioManager.playHealthPickup();
     }
 
     if (hp.collected || hp.x < game.camera.x - 200) {
@@ -398,12 +452,17 @@ export function updateGame(dt: number, deps: UpdateDeps) {
     }
   }
 
-  // Update camera
+  // Update camera with smooth lerp and noise-based shake
   const maxCamY = Math.max(0, game.world.height - deps.viewport.height);
-  const shakeX = game.shakeTime > 0 ? (Math.random() * 2 - 1) * game.shakeMag : 0;
-  const shakeY = game.shakeTime > 0 ? (Math.random() * 2 - 1) * game.shakeMag : 0;
+  const shakeX = game.shakeTime > 0 ? smoothNoise1D(game.gameTime * 12) * game.shakeMag : 0;
+  const shakeY = game.shakeTime > 0 ? smoothNoise1D(game.gameTime * 12 + 31.7) * game.shakeMag : 0;
   const targetCamX = Math.max(game.distance * 0.8, player.x - deps.viewport.width / 2 + 100);
-  game.camera.x = targetCamX + shakeX;
-  game.camera.y = Math.max(0, Math.min(maxCamY, player.y - deps.viewport.height / 2 + shakeY));
+  const targetCamY = Math.max(0, Math.min(maxCamY, player.y - deps.viewport.height / 2));
+  const camLerpX = 1 - Math.exp(-8 * dt);
+  const camLerpY = 1 - Math.exp(-6 * dt);
+  game.cameraSmoothX = lerp(game.cameraSmoothX, targetCamX, camLerpX);
+  game.cameraSmoothY = lerp(game.cameraSmoothY, targetCamY, camLerpY);
+  game.camera.x = game.cameraSmoothX + shakeX;
+  game.camera.y = game.cameraSmoothY + shakeY;
 }
 
