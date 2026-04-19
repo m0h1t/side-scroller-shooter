@@ -15,6 +15,9 @@ export type Enemy = {
   activateAtSec?: number; // when to become active (seconds)
   type: EnemyType;
   animTime: number; // for animations
+  dying: boolean;
+  dyingTime: number;
+  flashTimer: number;
 };
 
 export type Projectile = {
@@ -25,6 +28,7 @@ export type Projectile = {
   width: number;
   height: number;
   fromPlayer: boolean;
+  hasDrag?: boolean;
 };
 
 export type HealthPack = {
@@ -34,10 +38,12 @@ export type HealthPack = {
   height: number;
   animTime: number;
   collected: boolean;
+  baseY: number;
 };
 
 export type Particle = { x: number; y: number; vx: number; vy: number; life: number; size: number; color: string };
 export type Splat = { x: number; y: number; w: number; h: number; alpha: number };
+export type ScreenSplat = { x: number; y: number; radius: number; alpha: number; age: number };
 
 export type Player = {
   x: number;

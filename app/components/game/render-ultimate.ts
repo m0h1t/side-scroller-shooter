@@ -1,10 +1,13 @@
-import type { Enemy, HealthPack, Particle, Platform, Projectile, Splat } from "./types";
+import type { Enemy, HealthPack, Particle, Platform, Projectile, Splat, ScreenSplat } from "./types";
 import type { Player } from "./types";
 import { audioManager } from "./audio";
 
 export type Viewport = { width: number; height: number };
 export type GameState = {
   camera: { x: number; y: number };
+  cameraSmoothX: number;
+  cameraSmoothY: number;
+  gameTime: number;
   world: { height: number };
   score: number;
   distance: number;
@@ -27,7 +30,9 @@ export type RenderDeps = {
   healthPacks: HealthPack[];
   particles: Particle[];
   splats: Splat[];
+  screenSplats: ScreenSplat[];
   player: Player;
+  isTouchDevice?: boolean;
 };
 
 // Enhanced color palette with more contrast and atmosphere
@@ -148,7 +153,7 @@ function updateEnvironmentalEffects(dt: number, viewport: Viewport, cameraX: num
   }
 }
 
-export function renderGame({ ctx, game, viewport, platforms, enemies, projectiles, healthPacks, particles, splats, player }: RenderDeps) {
+export function renderGame({ ctx, game, viewport, platforms, enemies, projectiles, healthPacks, particles, splats, screenSplats, player, isTouchDevice }: RenderDeps) {
   // Initialize and update effects
   initEnvironmentalEffects(viewport);
   updateEnvironmentalEffects(0.016, viewport, game.camera.x);
@@ -211,7 +216,12 @@ export function renderGame({ ctx, game, viewport, platforms, enemies, projectile
   
   // Draw enemies with shadows
   enemies.forEach(enemy => {
-    if (enemy.hp <= 0 || !enemy.active) return;
+    if (enemy.hp <= 0 && !enemy.dying) return;
+    if (!enemy.active && !enemy.dying) return;
+    if (enemy.dying) {
+      const flashVisible = Math.floor(enemy.dyingTime / 0.05) % 2 === 0;
+      if (!flashVisible) return;
+    }
     drawEnemyWithShadow(ctx, enemy);
   });
   
@@ -270,9 +280,18 @@ export function renderGame({ ctx, game, viewport, platforms, enemies, projectile
   
   // Post-processing effects
   drawEnhancedPostEffects(ctx, viewport);
-  
+
+  // Screen blood splatter overlay
+  screenSplats.forEach(s => {
+    const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.radius);
+    g.addColorStop(0, `rgba(139, 0, 0, ${s.alpha})`);
+    g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.fillRect(s.x - s.radius, s.y - s.radius, s.radius * 2, s.radius * 2);
+  });
+
   // Draw ultimate HUD
-  drawUltimateHUD(ctx, game, player, viewport);
+  drawUltimateHUD(ctx, game, player, viewport, isTouchDevice);
   
   // Game over sequence
   if (game.gameOver) {
@@ -896,7 +915,7 @@ function drawEnhancedPostEffects(ctx: CanvasRenderingContext2D, viewport: Viewpo
   }
 }
 
-function drawUltimateHUD(ctx: CanvasRenderingContext2D, game: GameState, player: Player, viewport: Viewport) {
+function drawUltimateHUD(ctx: CanvasRenderingContext2D, game: GameState, player: Player, viewport: Viewport, isTouchDevice?: boolean) {
   ctx.save();
   
   // HUD positioning
@@ -1099,7 +1118,10 @@ function drawUltimateHUD(ctx: CanvasRenderingContext2D, game: GameState, player:
   ctx.font = '9px monospace';
   ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
   ctx.textAlign = 'center';
-  ctx.fillText('[A/D] Move  [W] Jump  [S] Crouch  [Space] Shoot  [M] Mute  [R] Restart', viewport.width / 2, viewport.height - 10);
+  const controlsHint = isTouchDevice
+    ? '← → ↑ on-screen buttons  |  tap mute / restart'
+    : '[A/D] Move  [W] Jump  [S] Crouch  [Space] Shoot  [M] Mute  [R] Restart';
+  ctx.fillText(controlsHint, viewport.width / 2, viewport.height - 10);
   ctx.restore();
   
   ctx.restore();

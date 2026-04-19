@@ -1,15 +1,25 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Platform, Enemy, Projectile, HealthPack, Particle, Splat } from "./game/types";
+import { useEffect, useRef, useState } from "react";
+import { Platform, Enemy, Projectile, HealthPack, Particle, Splat, ScreenSplat } from "./game/types";
 import { rand, generateInitialPlatforms, addPlatformChunk } from "./game/platforms";
 import { spawnEnemy } from "./game/spawn";
 import { updateGame } from "./game/update";
 import { renderGame, resetGameOverState } from "./game/render-ultimate";
 import { audioManager } from "./game/audio";
+import TouchControls from "./game/TouchControls";
 
 export default function SideScrollerGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const keysRef = useRef<Record<string, boolean>>({});
+  const jumpPressRef = useRef<() => void>(() => {});
+  const doRestartRef = useRef<() => void>(() => {});
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [isGameOver, setIsGameOver] = useState(false);
+
+  useEffect(() => {
+    setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -17,13 +27,10 @@ export default function SideScrollerGame() {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // Retro look: disable smoothing for crisper pixels
     ctx.imageSmoothingEnabled = false;
 
-    // Track viewport in CSS pixels (independent of devicePixelRatio)
     const viewport = { width: window.innerWidth, height: window.innerHeight };
 
-    // High-DPI aware canvas sizing
     const resizeCanvas = () => {
       viewport.width = window.innerWidth;
       viewport.height = window.innerHeight;
@@ -32,24 +39,26 @@ export default function SideScrollerGame() {
       canvas.height = Math.floor(viewport.height * dpr);
       canvas.style.width = `${viewport.width}px`;
       canvas.style.height = `${viewport.height}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
 
-    // Game state (endless scroller)
     const game = {
       camera: { x: 0, y: 0 },
+      cameraSmoothX: 0,
+      cameraSmoothY: 0,
+      gameTime: 0,
       world: { height: 800 },
       score: 0,
-      distance: 0, // total distance traveled
+      distance: 0,
       gameOver: false,
       paused: false,
       shakeTime: 0,
       shakeMag: 0,
-      difficulty: 1, // scales over time
-      nextPlatformX: 0, // where to generate next platform chunk
-      lastEnemySpawn: 0, // distance since last enemy spawn
+      difficulty: 1,
+      nextPlatformX: 0,
+      lastEnemySpawn: 0,
     };
 
     const addShake = (mag: number, time: number) => {
@@ -57,26 +66,24 @@ export default function SideScrollerGame() {
       game.shakeTime = Math.max(game.shakeTime, time);
     };
 
-    // Player (smoother motion with accel/friction and variable jump)
     const player = {
       x: 100,
       y: 0,
       width: 36,
       height: 72,
-      baseHeight: 72, // original standing height
-      crouchHeight: 45, // crouched height
+      baseHeight: 72,
+      crouchHeight: 45,
       vx: 0,
       vy: 0,
-      maxSpeed: 380, // px/s
-      accel: 2200, // px/s^2
-      friction: 2400, // px/s^2
-      jumpPower: 950, // px/s
+      maxSpeed: 380,
+      accel: 2200,
+      friction: 2400,
+      jumpPower: 950,
       onGround: false,
       hp: 100,
       facing: 1 as 1 | -1,
       shootCooldown: 0,
-      shootInterval: 0.18, // seconds
-      // Animation state
+      shootInterval: 0.18,
       animTime: 0,
       isWalking: false,
       isJumping: false,
@@ -86,34 +93,73 @@ export default function SideScrollerGame() {
       shootAnim: 0,
     };
 
-    // Jump helpers
-    const GRAVITY = 2600; // px/s^2
-    const COYOTE_TIME = 0.08; // seconds grace after leaving ground
-    const JUMP_BUFFER = 0.12; // seconds grace before landing
-
-    // Endless platform generation
+    const GRAVITY = 2600;
+    const COYOTE_TIME = 0.08;
+    const JUMP_BUFFER = 0.12;
 
     let platforms: Platform[] = generateInitialPlatforms();
     game.nextPlatformX = 1400;
 
-    // Place player on first platform
     if (platforms.length > 0) {
       const start = platforms[0];
       player.x = 80;
       player.y = start.y - player.height;
     }
 
-
     const enemies: Enemy[] = [];
     const projectiles: Projectile[] = [];
     const healthPacks: HealthPack[] = [];
-
-    // Gore particles and blood splats
     const particles: Particle[] = [];
     const splats: Splat[] = [];
+    const screenSplats: ScreenSplat[] = [];
 
-    // Input handling
-    const keys: { [key: string]: boolean } = {};
+    const keys = keysRef.current;
+    const controls = { coyoteTimer: 0, jumpBufferTimer: 0, jumpHeld: false };
+
+    jumpPressRef.current = () => {
+      controls.jumpBufferTimer = JUMP_BUFFER;
+      controls.jumpHeld = true;
+    };
+
+    const doRestart = () => {
+      if (!game.gameOver) return;
+      resetGameOverState();
+      game.score = 0;
+      game.distance = 0;
+      game.difficulty = 1;
+      game.gameOver = false;
+      game.lastEnemySpawn = 0;
+      game.cameraSmoothX = 0;
+      game.cameraSmoothY = 0;
+      game.gameTime = 0;
+      projectiles.length = 0;
+      platforms = generateInitialPlatforms();
+      game.nextPlatformX = 1400;
+      enemies.length = 0;
+      healthPacks.length = 0;
+      const start = platforms[0];
+      player.x = 80;
+      player.y = start ? start.y - player.height : 400;
+      player.vx = 0;
+      player.vy = 0;
+      player.hp = 100;
+      player.onGround = false;
+      player.animTime = 0;
+      player.isWalking = false;
+      player.isJumping = false;
+      player.isShooting = false;
+      player.isCrouching = false;
+      player.height = player.baseHeight;
+      controls.coyoteTimer = 0;
+      controls.jumpBufferTimer = 0;
+      controls.jumpHeld = false;
+      game.shakeMag = 0;
+      particles.length = 0;
+      splats.length = 0;
+      screenSplats.length = 0;
+      setIsGameOver(false);
+    };
+    doRestartRef.current = doRestart;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
@@ -122,28 +168,21 @@ export default function SideScrollerGame() {
       if (k === "w" || k === "arrowup") {
         controls.jumpBufferTimer = JUMP_BUFFER;
         controls.jumpHeld = true;
+        audioManager.playJump();
       }
-      // Toggle mute with M key
-      if (k === "m") {
-        audioManager.toggleMute();
-      }
+      if (k === "m") audioManager.toggleMute();
+      if (k === "r") doRestart();
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       keys[k] = false;
-      if (k === "w" || k === "arrowup") {
-        controls.jumpHeld = false;
-      }
+      if (k === "w" || k === "arrowup") controls.jumpHeld = false;
     };
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
 
-    // Controls used by update loop (jump helpers)
-    const controls = { coyoteTimer: 0, jumpBufferTimer: 0, jumpHeld: false };
-
-    // Game loop
     let lastTime = 0;
     let animationId: number;
     const gameLoop = (timestamp: number) => {
@@ -160,6 +199,7 @@ export default function SideScrollerGame() {
           healthPacks,
           particles,
           splats,
+          screenSplats,
           keys,
           addShake,
           constants: { GRAVITY, COYOTE_TIME },
@@ -168,6 +208,7 @@ export default function SideScrollerGame() {
           addPlatformChunk,
           spawnEnemy,
         });
+        if (game.gameOver) setIsGameOver(true);
       }
       renderGame({
         ctx,
@@ -179,72 +220,38 @@ export default function SideScrollerGame() {
         healthPacks,
         particles,
         splats,
+        screenSplats,
         player,
+        isTouchDevice: "ontouchstart" in window || navigator.maxTouchPoints > 0,
       });
       animationId = requestAnimationFrame(gameLoop);
     };
 
-
-
-    // Restart handler (regenerate level/enemies)
-    const handleRestart = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === "r" && game.gameOver) {
-        // Reset game over state
-        resetGameOverState();
-        
-        // Reset everything for new endless run
-        game.score = 0;
-        game.distance = 0;
-        game.difficulty = 1;
-        game.gameOver = false;
-        game.lastEnemySpawn = 0;
-        projectiles.length = 0;
-        platforms = generateInitialPlatforms();
-        game.nextPlatformX = 1400;
-        enemies.length = 0;
-        healthPacks.length = 0;
-        
-        // reposition player at start
-        const start = platforms[0];
-        player.x = 80;
-        player.y = start ? start.y - player.height : 400;
-        player.vx = 0;
-        player.vy = 0;
-        player.hp = 100;
-        player.onGround = false;
-        player.animTime = 0;
-        player.isWalking = false;
-        player.isJumping = false;
-        player.isShooting = false;
-        player.isCrouching = false;
-        player.height = player.baseHeight; // Reset to standing height
-        controls.coyoteTimer = 0;
-        controls.jumpBufferTimer = 0;
-        controls.jumpHeld = false;
-        game.shakeMag = 0;
-        particles.length = 0;
-        splats.length = 0;
-      }
-    };
-    window.addEventListener("keydown", handleRestart);
-
-    // Start game loop
     animationId = requestAnimationFrame(gameLoop);
 
-    // Cleanup
     return () => {
       cancelAnimationFrame(animationId);
       window.removeEventListener("resize", resizeCanvas);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("keydown", handleRestart);
     };
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ display: "block", width: "100%", height: "100%" }}
-    />
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <canvas
+        ref={canvasRef}
+        style={{ display: "block", width: "100%", height: "100%" }}
+      />
+      {isTouchDevice && (
+        <TouchControls
+          keys={keysRef.current}
+          onJumpPress={() => jumpPressRef.current()}
+          onMuteToggle={() => audioManager.toggleMute()}
+          onRestart={() => doRestartRef.current()}
+          isGameOver={isGameOver}
+        />
+      )}
+    </div>
   );
 }
